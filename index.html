@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Memoria - Buddy System</title>
+    <meta name="description" content="Simulador interactivo del algoritmo Buddy System para gestión de memoria">
+    <meta name="keywords" content="buddy system, memoria, simulación, algoritmos, sistemas operativos">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        #memoryContainer {
+            display: flex;
+            justify-content: flex-start;
+            align-items: flex-start;
+            padding: 1rem;
+            overflow-x: auto;
+            min-height: 400px;
+        }
+
+        .tree-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0; 
+            position: relative;
+            transition: width 0.4s ease-in-out;
+            box-sizing: border-box;
+        }
+        .node-display {
+            border: 2px solid #718096;
+            padding: 8px;
+            border-radius: 8px;
+            text-align: center;
+            width: 100%; 
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            z-index: 1;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            transition: background-color 0.4s ease;
+            overflow: hidden; /* Para contener la barra de uso */
+        }
+        .block-info {
+            font-size: 0.8rem;
+            font-weight: 500;
+            word-break: break-word;
+            position: relative; /* Para que el texto esté sobre la barra */
+            z-index: 2;
+        }
+        .node-display.free { background-color: #c6f6d5; border-color: #48bb78; }
+        .node-display.parent { background-color: #e2e8f0; border-color: #a0aec0; }
+        
+        /* --- NUEVO: Estilos para la barra de uso --- */
+        .node-display.allocated { 
+            background-color: #e2e8f0; /* Gris para la parte no usada (fragmentación) */
+            border-color: #4299e1;
+        }
+        .usage-bar {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background-color: #90cdf4; /* Azul para la parte usada */
+            transition: width 0.4s ease-in-out;
+            z-index: 1;
+        }
+        /* --- Fin de nuevos estilos --- */
+
+        .children-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            position: relative;
+            margin-top: 30px;
+            overflow: hidden;
+            transition: max-height 0.4s ease-in-out, opacity 0.4s ease-in-out 0.1s;
+        }
+        .children-container.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-top: 0;
+            transition: max-height 0.4s ease-in-out 0.1s, opacity 0.3s ease-in-out, margin-top 0.4s ease-in-out;
+        }
+        
+        .children-container::before {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 15px;
+            background-color: #a0aec0;
+        }
+        .tree-node:not(:only-child)::before {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 0;
+            width: 50%;
+            height: 2px;
+            background-color: #a0aec0;
+        }
+        .tree-node:not(:only-child)::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            right: 0;
+            width: 50%;
+            height: 2px;
+            background-color: #a0aec0;
+        }
+        .tree-node:first-child:last-child::before,
+        .tree-node:first-child:last-child::after { display: none; }
+        .tree-node:first-child::before { display: none; }
+        .tree-node:last-child::after { display: none; }
+
+        .deallocate-btn {
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            border-radius: 4px;
+            background-color: #e53e3e;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-top: 4px;
+            transition: background-color 0.2s;
+            position: relative;
+            z-index: 2;
+        }
+        .deallocate-btn:hover { background-color: #c53030; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+
+        <div class="bg-white rounded-lg shadow-xl p-6 mb-8 mt-8">
+            <div class="flex flex-col md:flex-row md:items-center md:space-x-4 space-y-4 md:space-y-0">
+                <div class="flex-grow">
+                    <label for="processSize" class="block text-sm font-medium text-gray-700 mb-1">Tamaño del Proceso (KB):</label>
+                    <input type="number" id="processSize" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Ej: 100">
+                </div>
+                <button id="allocateBtn" class="w-full md:w-auto bg-indigo-600 text-white font-semibold py-2 px-6 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    Asignar Memoria
+                </button>
+                 <button id="resetBtn" class="w-full md:w-auto bg-gray-500 text-white font-semibold py-2 px-6 rounded-md hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-150 ease-in-out">
+                    Reiniciar
+                </button>
+            </div>
+        </div>
+
+        <main>
+            <div class="bg-white rounded-lg shadow-xl p-6">
+                <h2 class="text-xl font-semibold mb-4 text-center">Estado de la Memoria (Total: 1024 KB)</h2>
+                <div id="memoryContainer" class="w-full bg-gray-200 rounded-lg border-4 border-gray-300"></div>
+            </div>
+        </main>
+        
+        <div class="bg-white rounded-lg shadow-xl p-6 mt-8">
+            <h2 class="text-xl font-semibold mb-2">Registro de Eventos</h2>
+            <div id="logContainer" class="h-40 bg-gray-50 rounded-md p-3 overflow-y-auto border border-gray-200 text-sm font-mono"></div>
+        </div>
+    </div>
+
+    <script>
+        const TOTAL_MEMORY = 1024;
+        const memoryContainer = document.getElementById('memoryContainer');
+        const logContainer = document.getElementById('logContainer');
+        const processSizeInput = document.getElementById('processSize');
+        const allocateBtn = document.getElementById('allocateBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        let memoryBlocks = {};
+        let nextBlockId = 1;
+        let nextProcessId = 1;
+
+        // --- LÓGICA DE DATOS ---
+        function initializeMemory() {
+            memoryBlocks = {};
+            nextBlockId = 1;
+            nextProcessId = 1;
+            const rootBlock = { id: nextBlockId++, size: TOTAL_MEMORY, isFree: true, processId: null, parentId: null, children: [], requestedSize: null };
+            memoryBlocks[rootBlock.id] = rootBlock;
+            logContainer.innerHTML = '';
+            logEvent('Sistema inicializado con 1024 KB de memoria libre.', 'info');
+            drawInitialTree();
+        }
+
+        function getRequiredBlockSize(size) {
+            if (size <= 0) return 0;
+            let powerOf2 = 1;
+            while (powerOf2 < size) { powerOf2 *= 2; }
+            return powerOf2;
+        }
+        
+        function findBestFitBlock(requiredSize) {
+            let bestFit = null;
+            for (const id in memoryBlocks) {
+                const block = memoryBlocks[id];
+                if (block.isFree && block.children.length === 0 && block.size >= requiredSize) {
+                    if (!bestFit || block.size < bestFit.size) {
+                        bestFit = block;
+                    }
+                }
+            }
+            return bestFit;
+        }
+
+        // --- MANEJADORES DE EVENTOS ---
+        function handleAllocation() {
+            const requestedSize = parseInt(processSizeInput.value);
+            if (isNaN(requestedSize) || requestedSize <= 0) {
+                logEvent('Error: Por favor, ingrese un tamaño de proceso válido y positivo.', 'error'); return;
+            }
+            if (requestedSize > TOTAL_MEMORY) {
+                logEvent(`Error: El tamaño solicitado (${requestedSize} KB) excede la memoria total (${TOTAL_MEMORY} KB).`, 'error'); return;
+            }
+            const requiredSize = getRequiredBlockSize(requestedSize);
+            logEvent(`Solicitud para ${requestedSize} KB. Se necesita un bloque de ${requiredSize} KB.`);
+            let blockToSplit = findBestFitBlock(requiredSize);
+            if (!blockToSplit) {
+                logEvent('Error: No hay suficiente memoria contigua disponible.', 'error'); return;
+            }
+
+            let finalBlockId = blockToSplit.id;
+
+            if (blockToSplit.size > requiredSize) {
+                let currentBlock = blockToSplit;
+                while (currentBlock.size / 2 >= requiredSize) {
+                    const newSize = currentBlock.size / 2;
+                    logEvent(`Dividiendo bloque de ${currentBlock.size} KB en dos de ${newSize} KB.`, 'split');
+                    
+                    const leftChild = { id: nextBlockId++, size: newSize, isFree: true, processId: null, parentId: currentBlock.id, children: [], requestedSize: null };
+                    const rightChild = { id: nextBlockId++, size: newSize, isFree: true, processId: null, parentId: currentBlock.id, children: [], requestedSize: null };
+                    memoryBlocks[leftChild.id] = leftChild; memoryBlocks[rightChild.id] = rightChild;
+                    currentBlock.children = [leftChild.id, rightChild.id];
+                    currentBlock.isFree = false;
+
+                    renderSplit(currentBlock.id, leftChild, rightChild);
+                    currentBlock = leftChild;
+                }
+                finalBlockId = currentBlock.id;
+            }
+
+            const blockToAllocate = memoryBlocks[finalBlockId];
+            blockToAllocate.isFree = false;
+            blockToAllocate.processId = `P${nextProcessId++}`;
+            blockToAllocate.requestedSize = requestedSize; // Guardar el tamaño real solicitado
+            logEvent(`Asignado Proceso ${blockToAllocate.processId} (${requestedSize} KB) en un bloque de ${blockToAllocate.size} KB.`, 'alloc');
+            
+            updateNodeDisplay(finalBlockId);
+            updateTreeWidths(finalBlockId);
+            processSizeInput.value = '';
+        }
+
+        function handleDeallocation(blockId) {
+            const block = memoryBlocks[blockId];
+            if (!block || block.isFree) return;
+            logEvent(`Liberando Proceso ${block.processId} del bloque de ${block.size} KB.`, 'free');
+            block.isFree = true;
+            block.processId = null;
+            block.requestedSize = null; // Limpiar el tamaño solicitado
+            updateNodeDisplay(blockId);
+            updateTreeWidths(blockId);
+            animateAndMerge(block.parentId);
+        }
+
+        function animateAndMerge(parentId) {
+            if (parentId === null) return;
+            const parent = memoryBlocks[parentId];
+            if (!parent || parent.children.length === 0) return;
+
+            const leftChild = memoryBlocks[parent.children[0]];
+            const rightChild = memoryBlocks[parent.children[1]];
+
+            if (leftChild && rightChild && leftChild.isFree && rightChild.isFree) {
+                logEvent(`Fusionando dos bloques de ${leftChild.size} KB para crear uno de ${parent.size} KB.`, 'merge');
+                const parentNode = document.getElementById(`node-${parentId}`);
+                const childrenContainer = parentNode.querySelector('.children-container');
+
+                childrenContainer.addEventListener('transitionend', () => {
+                    delete memoryBlocks[leftChild.id];
+                    delete memoryBlocks[rightChild.id];
+                    parent.children = [];
+                    parent.isFree = true;
+                    childrenContainer.remove();
+                    updateNodeDisplay(parentId);
+                    updateTreeWidths(parentId);
+                    animateAndMerge(parent.parentId);
+                }, { once: true });
+
+                childrenContainer.classList.add('collapsed');
+            }
+        }
+
+        // --- LÓGICA DE RENDERIZADO Y ANIMACIÓN ---
+        function drawInitialTree() {
+            memoryContainer.innerHTML = '';
+            const root = Object.values(memoryBlocks).find(b => b.parentId === null);
+            if (root) {
+                const tree = createBlockElement(root);
+                memoryContainer.appendChild(tree);
+            }
+        }
+
+        function createBlockElement(block) {
+            const MIN_LEAF_NODE_WIDTH = 80;
+            const NODE_SPACING = 8;
+
+            const treeNode = document.createElement('div');
+            treeNode.className = 'tree-node';
+            treeNode.id = `node-${block.id}`;
+            treeNode.style.padding = `0 ${NODE_SPACING / 2}px`;
+            
+            const nodeDisplay = document.createElement('div');
+            nodeDisplay.className = 'node-display';
+            treeNode.appendChild(nodeDisplay);
+
+            const info = document.createElement('div');
+            info.className = 'block-info';
+            nodeDisplay.appendChild(info);
+
+            updateNodeDisplay(block.id, treeNode); // Se pasa el elemento para actualizarlo
+
+            let totalWidth;
+            if (block.children.length > 0) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'children-container';
+                const leftChildEl = createBlockElement(memoryBlocks[block.children[0]]);
+                const rightChildEl = createBlockElement(memoryBlocks[block.children[1]]);
+                childrenContainer.appendChild(leftChildEl);
+                childrenContainer.appendChild(rightChildEl);
+                treeNode.appendChild(childrenContainer);
+                totalWidth = parseFloat(leftChildEl.style.width) + parseFloat(rightChildEl.style.width);
+            } else {
+                totalWidth = MIN_LEAF_NODE_WIDTH;
+            }
+            treeNode.style.width = `${totalWidth + NODE_SPACING}px`;
+            return treeNode;
+        }
+
+        function updateNodeDisplay(blockId, nodeElement = null) {
+            const block = memoryBlocks[blockId];
+            if (!block) return;
+            const node = nodeElement || document.getElementById(`node-${blockId}`);
+            const nodeDisplay = node.querySelector('.node-display');
+            if (!nodeDisplay) return;
+
+            nodeDisplay.classList.remove('free', 'allocated', 'parent');
+            const info = nodeDisplay.querySelector('.block-info');
+            let text = `${block.size} KB<br>`;
+            
+            // Limpiar elementos previos
+            nodeDisplay.querySelector('.deallocate-btn')?.remove();
+            nodeDisplay.querySelector('.usage-bar')?.remove();
+
+            if (block.children.length > 0) {
+                nodeDisplay.classList.add('parent');
+                text += 'Nodo Padre';
+            } else {
+                if (block.isFree) {
+                    nodeDisplay.classList.add('free');
+                    text += 'Libre';
+                } else {
+                    nodeDisplay.classList.add('allocated');
+                    text += `<b>${block.processId}</b> (${block.requestedSize} KB)`;
+                    
+                    // Crear y añadir la barra de uso
+                    const usagePercent = (block.requestedSize / block.size) * 100;
+                    const usageBar = document.createElement('div');
+                    usageBar.className = 'usage-bar';
+                    usageBar.style.width = `${usagePercent}%`;
+                    nodeDisplay.prepend(usageBar); // Prepend para que esté detrás del texto
+
+                    const btn = document.createElement('button');
+                    btn.innerText = 'Liberar';
+                    btn.className = 'deallocate-btn';
+                    btn.onclick = () => handleDeallocation(block.id);
+                    nodeDisplay.appendChild(btn);
+                }
+            }
+            info.innerHTML = text;
+        }
+
+        function renderSplit(parentId, leftChild, rightChild) {
+            const parentNode = document.getElementById(`node-${parentId}`);
+            updateNodeDisplay(parentId);
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'children-container collapsed';
+            const leftChildEl = createBlockElement(leftChild);
+            const rightChildEl = createBlockElement(rightChild);
+            childrenContainer.appendChild(leftChildEl);
+            childrenContainer.appendChild(rightChildEl);
+            parentNode.appendChild(childrenContainer);
+            requestAnimationFrame(() => {
+                childrenContainer.classList.remove('collapsed');
+            });
+        }
+
+        function updateTreeWidths(blockId) {
+            if (blockId === null) return;
+            const block = memoryBlocks[blockId];
+            const node = document.getElementById(`node-${block.id}`);
+            if (!node) return;
+
+            const MIN_LEAF_NODE_WIDTH = 80;
+            const NODE_SPACING = 8;
+            let totalWidth;
+
+            if (block.children.length > 0) {
+                const leftChildNode = document.getElementById(`node-${block.children[0]}`);
+                const rightChildNode = document.getElementById(`node-${block.children[1]}`);
+                totalWidth = parseFloat(leftChildNode.style.width) + parseFloat(rightChildNode.style.width);
+            } else {
+                totalWidth = MIN_LEAF_NODE_WIDTH;
+            }
+            node.style.width = `${totalWidth + NODE_SPACING}px`;
+            if (block.parentId !== null) {
+                updateTreeWidths(block.parentId);
+            }
+        }
+
+        function logEvent(message, type = 'info') {
+            const p = document.createElement('p');
+            let prefix = '';
+            switch(type) {
+                case 'alloc': p.className = 'text-blue-600'; prefix = '[ASIGNAR]'; break;
+                case 'free': p.className = 'text-red-600'; prefix = '[LIBERAR]'; break;
+                case 'split': p.className = 'text-yellow-600'; prefix = '[DIVIDIR]'; break;
+                case 'merge': p.className = 'text-green-600'; prefix = '[FUSIONAR]'; break;
+                case 'error': p.className = 'text-red-800 font-bold'; prefix = '[ERROR]'; break;
+                default: p.className = 'text-gray-700'; prefix = '[INFO]';
+            }
+            p.textContent = `${prefix} ${message}`;
+            logContainer.appendChild(p);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // --- INICIO ---
+        allocateBtn.addEventListener('click', handleAllocation);
+        resetBtn.addEventListener('click', initializeMemory);
+        processSizeInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') handleAllocation();
+        });
+        window.addEventListener('resize', drawInitialTree);
+        window.onload = initializeMemory;
+    </script>
+</body>
+</html>
