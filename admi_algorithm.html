@@ -1,0 +1,47 @@
+/**
+ * Calcula la menor potencia de 2 que es mayor o igual al tamaño solicitado.
+ * Esto determina el tamaño del bloque que el sistema necesita encontrar.
+ * @param {number} size - El tamaño solicitado en KB.
+ * @returns {number} - El tamaño del bloque requerido (una potencia de 2).
+ */
+function getRequiredBlockSize(size) {
+    if (size <= 0) return 0;
+    let powerOf2 = 1;
+    while (powerOf2 < size) {
+        powerOf2 *= 2;
+    }
+    return powerOf2;
+}
+
+/**
+ * Encuentra el bloque libre más pequeño que puede satisfacer la solicitud (Best-Fit).
+ * Itera a través de todos los bloques de memoria existentes.
+ * @param {number} requiredSize - El tamaño del bloque necesario (calculado por getRequiredBlockSize).
+ * @returns {object|null} - El objeto del bloque encontrado o null si no hay espacio.
+ */
+function findBestFitBlock(requiredSize) {
+    let bestFit = null;
+    // Itera sobre todos los bloques de memoria actuales.
+    for (const id in memoryBlocks) {
+        const block = memoryBlocks[id];
+        
+        // Un bloque es candidato si cumple tres condiciones:
+        // 1. Está libre (`block.isFree`).
+        // 2. Es una "hoja" en el árbol, es decir, no ha sido dividido (`block.children.length === 0`).
+        // 3. Su tamaño es suficiente para la solicitud (`block.size >= requiredSize`).
+        if (block.isFree && block.children.length === 0 && block.size >= requiredSize) {
+            
+            // Si es el primer bloque candidato que encontramos, lo guardamos.
+            if (!bestFit) {
+                bestFit = block;
+            } 
+            // Si ya teníamos un candidato, lo reemplazamos solo si el nuevo es más pequeño.
+            // Esto asegura que encontremos el bloque que mejor se ajusta, minimizando el desperdicio.
+            else if (block.size < bestFit.size) {
+                bestFit = block;
+            }
+        }
+    }
+    // Devuelve el mejor bloque encontrado o null si ninguno cumplió las condiciones.
+    return bestFit;
+}
