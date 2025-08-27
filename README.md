@@ -42,3 +42,4 @@ El simulador implementa el **Buddy System** con las siguientes características:
 ## Autor
 
 Desarrollado como proyecto académico para Sistemas Operativos 2.
+

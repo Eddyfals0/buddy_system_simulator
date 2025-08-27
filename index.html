@@ -203,17 +203,80 @@
             return powerOf2;
         }
         
-        function findBestFitBlock(requiredSize) {
-            let bestFit = null;
+        function findFirstFitBlock(requiredSize) {
+            // Obtener todos los bloques libres ordenados de izquierda a derecha
+            const freeBlocks = [];
             for (const id in memoryBlocks) {
                 const block = memoryBlocks[id];
                 if (block.isFree && block.children.length === 0 && block.size >= requiredSize) {
-                    if (!bestFit || block.size < bestFit.size) {
-                        bestFit = block;
-                    }
+                    freeBlocks.push(block);
                 }
             }
-            return bestFit;
+            
+            // Ordenar los bloques de izquierda a derecha basándose en su posición visual
+            freeBlocks.sort((a, b) => {
+                return getVisualPosition(a.id) - getVisualPosition(b.id);
+            });
+            
+            // Retornar el primer bloque que encuentre (first fit)
+            return freeBlocks.length > 0 ? freeBlocks[0] : null;
+        }
+        
+        function getBlockPosition(blockId) {
+            // Calcular la posición del bloque en el árbol (de izquierda a derecha)
+            const block = memoryBlocks[blockId];
+            if (!block) return 0;
+            
+            if (block.parentId === null) {
+                return 0; // Bloque raíz
+            }
+            
+            const parent = memoryBlocks[block.parentId];
+            if (!parent || parent.children.length === 0) return 0;
+            
+            // Si es el hijo izquierdo, posición base del padre
+            if (parent.children[0] === blockId) {
+                return getBlockPosition(parent.id);
+            }
+            // Si es el hijo derecho, posición base del padre + mitad del ancho del padre
+            else if (parent.children[1] === blockId) {
+                return getBlockPosition(parent.id) + (parent.size / 2);
+            }
+            
+            return 0;
+        }
+        
+        // Función auxiliar para obtener la posición visual de un bloque
+        function getVisualPosition(blockId) {
+            const block = memoryBlocks[blockId];
+            if (!block) return 0;
+            
+            // Si es el bloque raíz
+            if (block.parentId === null) {
+                return 0;
+            }
+            
+            const parent = memoryBlocks[block.parentId];
+            if (!parent || parent.children.length === 0) return 0;
+            
+            // Calcular la posición basada en el camino desde la raíz
+            let position = 0;
+            let currentBlock = block;
+            let currentParent = parent;
+            
+            while (currentParent) {
+                if (currentParent.children[0] === currentBlock.id) {
+                    // Hijo izquierdo - no añadir offset
+                } else if (currentParent.children[1] === currentBlock.id) {
+                    // Hijo derecho - añadir offset
+                    position += currentParent.size / 2;
+                }
+                
+                currentBlock = currentParent;
+                currentParent = memoryBlocks[currentParent.parentId];
+            }
+            
+            return position;
         }
 
         // --- MANEJADORES DE EVENTOS ---
@@ -227,7 +290,7 @@
             }
             const requiredSize = getRequiredBlockSize(requestedSize);
             logEvent(`Solicitud para ${requestedSize} KB. Se necesita un bloque de ${requiredSize} KB.`);
-            let blockToSplit = findBestFitBlock(requiredSize);
+            let blockToSplit = findFirstFitBlock(requiredSize);
             if (!blockToSplit) {
                 logEvent('Error: No hay suficiente memoria contigua disponible.', 'error'); return;
             }
